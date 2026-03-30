@@ -3,7 +3,7 @@ from pinecone import Pinecone
 from google.genai.types import EmbedContentConfig
 
 # 1. API Configuration
-GEMINI_API_KEY = "AIzaSyCvpS6f_UrgAS2FhdD6ZEK32WrBbsxRONo" 
+GEMINI_API_KEY = "AIzaSyD8D29a60Uvu7FOR5AbJaA3ZQ0vS2zbcV4" 
 PINECONE_API_KEY = "pcsk_2tCAii_HNhEUG8tnrrw6bfrNxVFYa7A4eBVdjjZESMFyMwuRQ5o1vZXn1KsoGtuA3f6GEq"
 
 # Initialize clients
