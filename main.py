@@ -5,6 +5,10 @@ from pydantic import BaseModel
 from google import genai 
 from pinecone import Pinecone
 import os
+from dotenv import load_dotenv # [新增] 导入 dotenv
+
+# [新增] 加载本地的 .env 文件
+load_dotenv()
 
 app = FastAPI()
 
@@ -16,9 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Keep your keys here
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+# [修改] 使用 os.getenv 安全读取环境变量，不再硬编码
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+
+# [新增] 安全校验，如果忘记配置会报错提示
+if not GEMINI_API_KEY or not PINECONE_API_KEY:
+    raise ValueError("API Keys are missing. Please set them in your .env file.")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
@@ -84,7 +92,7 @@ def retrieve_from_pinecone(board: list[str], user_message: str) -> str:
 
 
 @app.post("/api/chat")
-async def chat_with_ai(request: ChatRequest):
+def chat_with_ai(request: ChatRequest):
     user_message = request.message
     current_board = request.board
     
