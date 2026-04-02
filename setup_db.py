@@ -1,10 +1,19 @@
 from google import genai
 from pinecone import Pinecone
 from google.genai.types import EmbedContentConfig
+import os
+from dotenv import load_dotenv # [新增]
+
+# [新增] 加载本地的 .env 文件
+load_dotenv()
 
 # 1. API Configuration
-GEMINI_API_KEY = "AIzaSyBXDR6fkey9qKdOXHVvijaNjkbroPsG0yw" 
-PINECONE_API_KEY = "pcsk_2tCAii_HNhEUG8tnrrw6bfrNxVFYa7A4eBVdjjZESMFyMwuRQ5o1vZXn1KsoGtuA3f6GEq"
+# [修改] 使用 os.getenv 读取
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+
+if not GEMINI_API_KEY or not PINECONE_API_KEY:
+    raise ValueError("API Keys are missing. Please set them in your .env file.")
 
 # Initialize clients
 client = genai.Client(api_key=GEMINI_API_KEY)
