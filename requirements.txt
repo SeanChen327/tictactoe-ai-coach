@@ -3,3 +3,6 @@ pydantic
 google-genai
 pinecone
 python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
