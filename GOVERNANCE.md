@@ -22,9 +22,10 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 #### 1. Technical Decisions
 
-- **Authentication Standard**: Implemented OAuth2 password flow with JWT (JSON Web Tokens) to secure backend resources. Passwords are securely hashed using `bcrypt<4.0.0` (version pinned to resolve `passlib` dependency conflicts).
+- **Authentication Standard**: Implemented OAuth2 password flow with JWT (JSON Web Tokens) to secure backend resources.
 - **Zero-Trust UI**: Engineered a strict UI state machine. The game board and AI interfaces are completely hidden (`display: none`) until a valid JWT is detected in `localStorage`.
 - **API Lockdown**: Secured FastAPI endpoints (`/api/chat`, `/api/generate-report`) using `Depends(get_current_active_user)`, mathematically guaranteeing zero unauthorized API quota consumption.
+- **Vercel Deployment Hotfix**: Explicitly pinned `bcrypt<4.0.0` in `requirements.txt`. This resolved a critical serverless initialization crash (`ValueError: password cannot be longer than 72 bytes` and `AttributeError`) caused by `passlib` failing its internal wrap bug detection against `bcrypt 4.x`.
 
 #### 2. Security & Quality Audit
 
