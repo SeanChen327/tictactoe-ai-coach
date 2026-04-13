@@ -14,6 +14,30 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 ## 📖 Decision Log
 
+### Feature: CSV Standardization & UX Flow Optimization
+
+**Date:** 2026-04-13
+**Branch:** `feature/csv-data-and-ux-fix`
+**Status:** Pending Peer Review
+
+#### 1. Technical Decisions
+
+- **Data Mapping Upgrade**: Standardized CSV output by mapping internal symbols (X/O) to professional Go/Gomoku terminology (Black/White).
+- **Coordinate System Transformation**: Implemented a conversion formula in `downloadCSV()` to translate 1D array indices (0-224) into 2D algebraic coordinates (A-O, 1-15).
+- **UX Interruption Fix**: Decoupled the AI Report generation from the game-end event. Replaced the auto-modal with a "View AI Report" button in the status bar to allow users to inspect the board before navigating away.
+
+#### 2. Security & Quality Audit
+
+- **API Integrity**: Verified that the frontend-to-backend data contract (`history` object) remains unchanged to avoid breaking existing FastAPI endpoints.
+- **State Consistency**: Ensured the game-end result string is passed correctly to the manual trigger button.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
+---
+
 ### Feature: Gomoku 15x15 UI/UX Optimization (Coordinates & Grid Fix)
 
 **Date:** 2026-04-13
