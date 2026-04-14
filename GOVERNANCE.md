@@ -14,6 +14,30 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 ## 📖 Decision Log
 
+### Feature: RenjuNet RAG Knowledge Base Integration
+
+**Date:** 2026-04-13
+**Branch:** `feature/rag-renjunet-upgrade`
+**Status:** Pending Peer Review
+
+#### 1. Technical Decisions
+
+- **Data Sourcing**: Migrated the RAG knowledge base to utilize professional Gomoku/Renju strategies from The International Renju Federation (RenjuNet).
+- **Bypass Data Pipeline**: Engineered isolated `scrape_renjunet.py` and `ingest_renjunet.py` scripts to collect, clean (JSON), and embed data into Pinecone.
+- **Zero API Intrusion**: Strictly maintained existing API contracts in `main.py`; no core application endpoints or prompt injection code were modified.
+
+#### 2. Security & Quality Audit
+
+- **Data Quality**: Utilized a JSON intermediary layer to allow manual inspection and filtering of scraped web data before vectorization, drastically reducing the risk of LLM hallucinations.
+- **Environment Isolation**: Operational scripts securely load `GEMINI_API_KEY` and `PINECONE_API_KEY` directly from the local environment, avoiding credential leakage.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
+---
+
 ### Feature: CSV Standardization & UX Flow Optimization
 
 **Date:** 2026-04-13
