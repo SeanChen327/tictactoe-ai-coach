@@ -4,3 +4,6 @@ __pycache__/
 
 # Database
 *.db
+
+# Rag Knowledge
+renjunet_knowledge.json
