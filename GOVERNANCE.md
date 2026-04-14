@@ -1,6 +1,6 @@
 # Project Governance & Decision Log
 
-## 📌 Project Workflows & Review Standards
+## Project Workflows & Review Standards
 
 To ensure production-grade quality and security, all contributors must strictly adhere to the following protocol:
 
