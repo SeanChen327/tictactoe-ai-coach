@@ -109,6 +109,7 @@ class GomokuSimulator:
                 "step": step,
                 "player": current_player,
                 "index": move_idx,
+                "board_after": list(self.board),  # 👈 [修复]: 新增这一行，保存当前棋盘快照
                 "evaluation_label": "AI Strategy",
                 "comment": f"Automated battle move at {self.index_to_coord(move_idx)}",
                 "missed_best_move": ""

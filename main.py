@@ -1,15 +1,15 @@
 import logging
 import os
+import json
 from datetime import datetime, timedelta
 from typing import Optional, Any, Dict, List
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from google import genai 
-from pinecone import Pinecone
 from dotenv import load_dotenv
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -26,6 +26,10 @@ from langchain_pinecone import PineconeVectorStore
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
+
+# --- [NEW] 引入离线对弈引擎 ---
+# 请确保您已经创建了 ai_battle_engine.py 文件
+from ai_battle_engine import GomokuSimulator
 
 # [SECURITY UPDATE] Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -76,6 +80,9 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+# [NEW] 从环境变量读取 Cron 密钥
+CRON_SECRET = os.getenv("CRON_SECRET", "default_internal_secret_change_me")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -105,6 +112,9 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
 
 class UserCreate(BaseModel):
     username: str
@@ -263,6 +273,7 @@ class GomokuRagService:
 rag_service = GomokuRagService()
 
 # --- API ENDPOINTS ---
+
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     return {"status": "online", "timestamp": datetime.utcnow().isoformat()}
@@ -312,3 +323,105 @@ async def generate_report(request: GameReportRequest, current_user: UserORM = De
         return {"report_text": response.text, "raw_history": [m.dict() for m in request.history]}
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to generate report.")
+
+# --- [NEW] AI SCHEDULED BATTLE ENDPOINTS ---
+
+@app.post("/api/schedule-match")
+async def schedule_ai_match(
+    request: MatchScheduleRequest, 
+    db: Session = Depends(get_db),
+    current_user: UserORM = Depends(get_current_active_user)
+):
+    """
+    用户预约一场未来的 AI 对决。
+    """
+    new_match = ScheduledMatchORM(
+        user_id=current_user.id,
+        scheduled_time=request.scheduled_time,
+        status="PENDING"
+    )
+    db.add(new_match)
+    db.commit()
+    logger.info(f"User {current_user.username} scheduled a match for {request.scheduled_time}")
+    return {"message": "Match scheduled successfully", "id": new_match.id}
+
+@app.get("/api/notifications")
+async def get_match_notifications(
+    db: Session = Depends(get_db),
+    current_user: UserORM = Depends(get_current_active_user)
+):
+    """
+    检查是否有已完成且未通知的对局。
+    """
+    completed_matches = db.query(ScheduledMatchORM).filter(
+        ScheduledMatchORM.user_id == current_user.id,
+        ScheduledMatchORM.status == "COMPLETED",
+        ScheduledMatchORM.is_notified == False
+    ).all()
+    
+    notifications = []
+    for m in completed_matches:
+        notifications.append({
+            "id": m.id,
+            "result": m.final_result,
+            "time": m.scheduled_time
+        })
+        # 标记为已通知
+        m.is_notified = True
+    
+    db.commit()
+    return {"notifications": notifications}
+
+@app.get("/api/scheduled-report/{match_id}")
+async def get_scheduled_report(
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserORM = Depends(get_current_active_user)
+):
+    """
+    获取预约对弈的结果历史。
+    """
+    match = db.query(ScheduledMatchORM).filter(
+        ScheduledMatchORM.id == match_id,
+        ScheduledMatchORM.user_id == current_user.id
+    ).first()
+    
+    if not match or not match.match_data:
+        raise HTTPException(status_code=404, detail="Match report not found")
+    
+    return {"history": match.match_data, "final_result": match.final_result}
+
+@app.post("/api/internal/execute-matches")
+async def execute_scheduled_matches(
+    x_cron_secret: str = Header(None), 
+    db: Session = Depends(get_db)
+):
+    """
+    [INTERNAL] 查找并执行所有到期的预约。
+    """
+    if x_cron_secret != CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Unauthorized internal call")
+
+    now = datetime.utcnow()
+    pending_matches = db.query(ScheduledMatchORM).filter(
+        ScheduledMatchORM.status == "PENDING",
+        ScheduledMatchORM.scheduled_time <= now
+    ).all()
+
+    executed_count = 0
+    for match in pending_matches:
+        try:
+            # 运行模拟器
+            simulator = GomokuSimulator()
+            history, result = simulator.run_match()
+            
+            match.match_data = history
+            match.final_result = result
+            match.status = "COMPLETED"
+            executed_count += 1
+        except Exception as e:
+            logger.error(f"Failed to execute match {match.id}: {e}")
+            match.status = "FAILED"
+    
+    db.commit()
+    return {"executed_matches": executed_count}
