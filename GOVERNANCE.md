@@ -14,6 +14,30 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 ## 📖 Decision Log
 
+## Feature: AI Scheduled Battle Infrastructure
+
+**Date:** 2026-04-16
+**Branch:** `feature/ai-scheduled-battle`
+**Status:** In Development
+
+### 1. Technical Decisions
+
+- **Async Execution Pattern**: Decoupled the AI match execution from the user request cycle. Matches are scheduled in PostgreSQL and triggered by a GitHub Actions cron job to ensure system reliability.
+- **Python-Native Heuristic Engine**: Ported the JavaScript evaluation logic to a standalone Python `GomokuSimulator`. This achieves zero-cost simulations without calling the Gemini API, preserving API quotas for real-time user chat.
+- **State Persistence**: Introduced `ScheduledMatchORM` to store pre-computed match results as JSON, allowing for "Notification Red Dots" and instant CSV generation upon user login.
+
+### 2. Security & Quality Audit
+
+- **Internal API Hardening**: The match execution endpoint will require a `CRON_SECRET` validation header to prevent unauthorized server-side compute consumption.
+- **Data Integrity**: The Python engine is mathematically verified against the JS engine to ensure consistent move quality and win-rate estimations.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
+---
+
 ### Feature: LangChain RAG Architecture & MRL Database Migration
 
 **Date:** 2026-04-16

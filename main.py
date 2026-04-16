@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,11 +15,12 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 
 # --- SQLAlchemy Imports ---
-from sqlalchemy import create_engine, Column, Integer, String, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.sql import func
 
-# --- LangChain Imports (New for RAG Refactor) ---
+# --- LangChain Imports ---
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.prompts import ChatPromptTemplate
@@ -52,6 +53,25 @@ class UserORM(Base):
     hashed_password = Column(String)
     disabled = Column(Boolean, default=False)
 
+class ScheduledMatchORM(Base):
+    """
+    [NEW] 存储 AI 预约对局数据。
+    """
+    __tablename__ = "scheduled_matches"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    status = Column(String, default="PENDING")  # PENDING, COMPLETED, FAILED
+    scheduled_time = Column(DateTime)
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # 存储对局历史 (JSON 格式，复用前端 gameHistory 结构)
+    match_data = Column(JSON, nullable=True) 
+    final_result = Column(String, nullable=True)
+    
+    # 消息提醒状态
+    is_notified = Column(Boolean, default=False)
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -79,16 +99,12 @@ if not GEMINI_API_KEY or not PINECONE_API_KEY:
     logger.error("Critical API Keys are missing in .env file.")
     raise ValueError("API Keys are missing.")
 
-# Keep the original GenAI client for non-RAG tasks if needed
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- DATA MODELS (Pydantic) ---
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-class TokenData(BaseModel):
-    username: Optional[str] = None
 
 class UserCreate(BaseModel):
     username: str
@@ -104,21 +120,25 @@ class UserOut(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    board: list[str]
+    board: List[str]
     last_evaluation: Optional[Dict[str, Any]] = None
 
 class Move(BaseModel):
     step: int
     player: str
     index: int
-    board_after: list[str]
+    board_after: List[str]
     evaluation_label: str = ""
     comment: str = ""
     missed_best_move: Any = ""
 
 class GameReportRequest(BaseModel):
-    history: list[Move]
+    history: List[Move]
     final_result: str
+
+# [NEW] 预约对局请求模型
+class MatchScheduleRequest(BaseModel):
+    scheduled_time: datetime
 
 # --- UTILITIES ---
 def get_db():
@@ -134,7 +154,7 @@ def get_password_hash(password):
 
 def create_access_token(data, expires_delta=None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -158,7 +178,7 @@ async def get_current_active_user(current_user: UserORM = Depends(get_current_us
     return current_user
 
 # --- HEURISTIC ANALYSIS ---
-def analyze_board(board: list[str]) -> str:
+def analyze_board(board: List[str]) -> str:
     BOARD_SIZE = 15
     directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
     for r in range(BOARD_SIZE):
@@ -273,7 +293,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 async def chat_with_ai(request: ChatRequest, current_user: UserORM = Depends(get_current_active_user)):
     logger.info(f"User '{current_user.username}' requested AI chat.")
     try:
-        # Using the refactored LangChain logic
         reply = await rag_service.get_chain().ainvoke({
             "message": request.message,
             "board": request.board,
