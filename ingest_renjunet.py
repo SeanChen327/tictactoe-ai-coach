@@ -51,9 +51,9 @@ def ingest_knowledge_base(json_filepath: str = "renjunet_knowledge.json") -> Non
         try:
             # Exact API call format from original setup_db.py
             embedding_result = client.models.embed_content(
-                model="gemini-embedding-001",
+                model="models/gemini-embedding-001", # 👈 换成最新的主力模型
                 contents=item["text"],
-                config=EmbedContentConfig(output_dimensionality=768)
+                config=EmbedContentConfig(output_dimensionality=768) # 这里的 768 保持不动，完美降维！
             )
             vector_values = embedding_result.embeddings[0].values
             vectors_to_upsert.append((item["id"], vector_values, {"text": item["text"]}))
