@@ -4,14 +4,12 @@ import httpx
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv  # [新增] 引入 dotenv
 
-# [新增] 强制在脚本第一步读取根目录的 .env 文件
 load_dotenv() 
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# 现在它绝对能百分之百拿到你写在 .env 里的密钥了！
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 class TestAICoachQuality:

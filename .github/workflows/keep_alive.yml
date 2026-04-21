@@ -1,33 +1,45 @@
 # ---------------------------------------------------------
 # Project: Gomoku AI Coach (15x15)
-# Feature: Strategy B (Keep-Alive Mechanism)
+# Feature: Strategy B + AI Battle Trigger
 # ---------------------------------------------------------
 
-name: Render Keep-Alive Automation
+name: Render Keep-Alive & AI Battle Trigger
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: "*/10 * * * *" # 每 10 分钟运行一次
+  workflow_dispatch: # 允许手动触发
 
 jobs:
-  ping_service:
+  ping_and_trigger:
     runs-on: ubuntu-latest
     steps:
-      - name: Send Stealth Health Check
+      - name: 🌐 Stealth Health Check (Keep-Alive)
         env:
           RENDER_APP_URL: "https://tictactoe-preview-service.onrender.com"
         run: |
           echo "Sending keep-alive request to $RENDER_APP_URL/api/health"
-
           STATUSCODE=$(curl -s -o /dev/null -w "%{http_code}" \
             -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
             "$RENDER_APP_URL/api/health")
+          echo "Health Check Response: $STATUSCODE"
 
-          echo "HTTP Response Code: $STATUSCODE"
+      - name: ⚔️ Trigger Scheduled AI Battles
+        env:
+          RENDER_APP_URL: "https://tictactoe-preview-service.onrender.com"
+          CRON_SECRET: ${{ secrets.CRON_SECRET }} # 从 GitHub Secrets 读取密钥
+        run: |
+          echo "Triggering pending AI battles..."
+          RESPONSE=$(curl -s -X POST "$RENDER_APP_URL/api/internal/execute-matches" \
+            -H "X-Cron-Secret: $CRON_SECRET" \
+            -H "Content-Type: application/json")
 
-          if [ "$STATUSCODE" -ne 200 ]; then
-            echo "Error: Health check failed with status $STATUSCODE"
+          echo "Execution Result: $RESPONSE"
+
+          # 检查是否包含执行计数，用于日志审计
+          if [[ "$RESPONSE" == *"executed_matches"* ]]; then
+            echo "Successfully connected to internal match engine."
+          else
+            echo "Error: Failed to trigger matches or unauthorized."
             exit 1
           fi
-          echo "Service is awake."

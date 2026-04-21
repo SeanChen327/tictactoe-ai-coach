@@ -14,6 +14,56 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 ## 📖 Decision Log
 
+## Feature: User-Defined AI Battle Scheduler
+
+**Date:** 2026-04-16
+**Branch:** feature/ai-scheduled-battle
+**Status:** Pending Peer Review
+
+### 1. Technical Decisions
+
+- **Async Execution Pattern**: Utilized a headless Python engine (ai_battle_engine.py) for simulations. Matches are triggered by an external cron heartbeat rather than blocking the main web process, ensuring server stability.
+- **ISO-8601 Time Synchronization**: Standardized on ISO strings for client-server communication. This resolves potential drift between the user's local browser timezone and the Render server's UTC environment.
+- **LLM Bypass for Automated Logs**: Optimized token usage by skipping Gemini generative analysis for bot-vs-bot games, providing direct CSV exports instead of expensive text summaries.
+- **Stateless Polling via Notifications**: Implemented a "Red Dot" (Inbox) polling mechanism on the frontend to check for completed matches without requiring a persistent WebSocket connection.
+
+### 2. Security & Quality Audit
+
+- **Internal Endpoint Hardening**: Protected the /api/internal/execute-matches route with a mandatory X-Cron-Secret header, preventing unauthorized resource consumption.
+- **Input Validation**: Added client-side and server-side checks to prevent scheduling battles in the past, reducing invalid database entries.
+- **Process Isolation**: Used taskkill protocols during local development to ensure zombie Python processes do not hold port 8000, maintaining consistency between local and cloud environments.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
+---
+
+## Feature: AI Scheduled Battle Infrastructure
+
+**Date:** 2026-04-16
+**Branch:** `feature/ai-scheduled-battle`
+**Status:** Pending Peer Review
+
+### 1. Technical Decisions
+
+- **Async Execution Pattern**: Decoupled the AI match execution from the user request cycle. Matches are scheduled in PostgreSQL and triggered by a GitHub Actions cron job to ensure system reliability.
+- **Python-Native Heuristic Engine**: Ported the JavaScript evaluation logic to a standalone Python `GomokuSimulator`. This achieves zero-cost simulations without calling the Gemini API, preserving API quotas for real-time user chat.
+- **State Persistence**: Introduced `ScheduledMatchORM` to store pre-computed match results as JSON, allowing for "Notification Red Dots" and instant CSV generation upon user login.
+
+### 2. Security & Quality Audit
+
+- **Internal API Hardening**: The match execution endpoint will require a `CRON_SECRET` validation header to prevent unauthorized server-side compute consumption.
+- **Data Integrity**: The Python engine is mathematically verified against the JS engine to ensure consistent move quality and win-rate estimations.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
+---
+
 ### Feature: LangChain RAG Architecture & MRL Database Migration
 
 **Date:** 2026-04-16
