@@ -1,6 +1,8 @@
+# main.py
 import logging
 import os
 import json
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Any, Dict, List
 
@@ -28,7 +30,6 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 
 # --- [NEW] 引入离线对弈引擎 ---
-# 请确保您已经创建了 ai_battle_engine.py 文件
 from ai_battle_engine import GomokuSimulator
 
 # [SECURITY UPDATE] Initialize logging
@@ -37,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
+
+# [DevOps] 全局控制：是否启用 AI 挡板模式 (Mock Mode)
+# 当在 CI/CD 测试环境中注入 MOCK_AI="true" 时，将跳过真实的大模型调用以保护 API Quota
+MOCK_AI = os.getenv("MOCK_AI", "false").lower() == "true"
 
 # --- DATABASE CONFIGURATION ---
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./tictactoe.db")
@@ -104,9 +109,12 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 if not GEMINI_API_KEY or not PINECONE_API_KEY:
     logger.error("Critical API Keys are missing in .env file.")
-    raise ValueError("API Keys are missing.")
+    # 如果不是 Mock 模式，才强制抛出异常；方便 CI 环境无密钥也能跑通部分基础测试
+    if not MOCK_AI:
+        raise ValueError("API Keys are missing.")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+if GEMINI_API_KEY:
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- DATA MODELS (Pydantic) ---
 class Token(BaseModel):
@@ -212,6 +220,10 @@ def analyze_board(board: List[str]) -> str:
 # --- LANGCHAIN RAG SERVICE ---
 class GomokuRagService:
     def __init__(self):
+        # 如果是 MOCK 模式且没有 API KEY，则跳过初始化，防止报错
+        if MOCK_AI and not GEMINI_API_KEY:
+            return
+            
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             temperature=0.7,
@@ -303,6 +315,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.post("/api/chat")
 async def chat_with_ai(request: ChatRequest, current_user: UserORM = Depends(get_current_active_user)):
     logger.info(f"User '{current_user.username}' requested AI chat.")
+    
+    # 👇 [QA Gate] 如果处于 CI/CD 挡板模式，跳过大模型调用以保护 API Quota
+    if MOCK_AI:
+        await asyncio.sleep(1) # 模拟网络延迟，保证前端 Loading 动画的测试时序
+        return {"reply": "You're doing great with a 55% win rate! Tactically, playing at H9 is your best move right now to build a strong offensive shape. Keep it up!"}
+
     try:
         reply = await rag_service.get_chain().ainvoke({
             "message": request.message,
@@ -316,6 +334,14 @@ async def chat_with_ai(request: ChatRequest, current_user: UserORM = Depends(get
 
 @app.post("/api/generate-report")
 async def generate_report(request: GameReportRequest, current_user: UserORM = Depends(get_current_active_user)):
+    # 👇 [QA Gate] 同样为生成报告接口提供 Mock 保护
+    if MOCK_AI:
+        await asyncio.sleep(1)
+        return {
+            "report_text": "[MOCK AI] This is a mocked executive summary. Great game!", 
+            "raw_history": [m.dict() for m in request.history]
+        }
+
     history_summary = "\n".join([f"Step {m.step}: {m.evaluation_label} - {m.comment}" for m in request.history])
     report_prompt = f"Provide a brief Executive Summary (max 100 words) of this match. Result: {request.final_result}. History: {history_summary[-1000:]}"
     try:

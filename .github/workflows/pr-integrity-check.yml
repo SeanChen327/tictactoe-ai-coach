@@ -43,6 +43,7 @@ jobs:
       PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
       SECRET_KEY: "ci-test-temporary-secret-key"
       DATABASE_URL: "sqlite:///./test.db" # CI 使用临时 SQLite 数据库
+      MOCK_AI: "true"
 
     steps:
       - uses: actions/checkout@v4

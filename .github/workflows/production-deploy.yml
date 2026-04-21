@@ -12,7 +12,6 @@ on:
     branches: [main]
 
 jobs:
-  # 阶段一：终极回归测试 (确保主分支代码绝对安全)
   verify-production-readiness:
     name: 🧪 Pre-Deploy Verification
     runs-on: ubuntu-latest
@@ -21,6 +20,7 @@ jobs:
       PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
       SECRET_KEY: "ci-test-temporary-secret-key"
       DATABASE_URL: "sqlite:///./test.db"
+      MOCK_AI: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +36,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+
+      # 👇 [核心修复]：补齐 CD 流水线缺失的浏览器内核安装步骤
+      - name: 🎭 Install Playwright Browsers
+        run: playwright install chromium --with-deps
 
       - name: 🚀 Start Test Server
         run: |
