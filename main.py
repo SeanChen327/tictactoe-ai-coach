@@ -196,6 +196,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if user is None: raise credentials_exception
     return user
 
+# ✅ CORRECT: Depends on get_current_user
 async def get_current_active_user(current_user: UserORM = Depends(get_current_user)):
     if current_user.disabled: raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
@@ -322,6 +323,13 @@ async def chat_with_ai(request: ChatRequest, current_user: UserORM = Depends(get
     logger.info(f"User '{current_user.username}' requested AI chat.")
     start_t = time.time()
     
+    # ---------------------------------------------------------
+    # 🛡️ Validation Layer (Input Guardrails & Red Teaming) 
+    # ---------------------------------------------------------
+    if governance.detect_adversarial_input(request.message):
+        logger.warning(f"[SECURITY] Adversarial prompt blocked for user {current_user.username}")
+        return {"reply": "I can only discuss Gomoku strategies.", "telemetry": {}}
+
     # 👇 [QA Gate] If running in CI/CD mock mode
     if MOCK_AI:
         await asyncio.sleep(1) 
@@ -339,17 +347,23 @@ async def chat_with_ai(request: ChatRequest, current_user: UserORM = Depends(get
             return {"reply": "The AI coach is temporarily unavailable.", "telemetry": {}}
 
     # ---------------------------------------------------------
-    # 🛡️ Validation Layer (Guardrails) 
+    # 🛡️ Validation Layer (Output Guardrails) 
     # ---------------------------------------------------------
-    if not governance.validate_output_safety(reply_text, request.board):
-        # Fallback: Do not return erroneous coordinate hallucinations to the user
-        reply_text = "I apologize, my coordinate analysis was slightly off just now. Could you rephrase your question?"
+    is_safe, reason = governance.validate_output_safety(reply_text, request.board)
+    if not is_safe:
+        logger.error(f"[Gr] Response suppressed: {reason}")
+        reply_text = "I apologize, my analysis encountered an error. Let's look at the board again."
 
     # ---------------------------------------------------------
-    # 📊 Assurance Layer (Metrics + Evaluation)
+    # 📊 Assurance Layer (Metrics, Evaluation, HITL)
     # ---------------------------------------------------------
     metrics = governance.track_telemetry(start_t, reply_text)
     quality_score = governance.evaluate_response_consistency(reply_text, request.last_evaluation)
+
+    # 触发 HITL 逻辑
+    if governance.requires_human_oversight(quality_score):
+        # 在生产环境中，此处的 critical log 通常会被配置的报警系统（如 Sentry/Datadog/PagerDuty）捕获
+        logger.critical(f"[Hl] ESCALATE TO HITL. User: {current_user.username}, Score: {quality_score:.2f}, Reply: {reply_text}")
 
     # Record production-grade logs including telemetry and quality scoring
     logger.info(

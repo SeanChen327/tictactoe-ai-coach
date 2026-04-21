@@ -1,7 +1,7 @@
 # ai_governance.py
 import time
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 import logging
 from datetime import datetime
 
@@ -10,73 +10,87 @@ logger = logging.getLogger(__name__)
 class GomokuAIGovernance:
     """
     Validation and Assurance module based on the AI Periodic Table.
-    Covers: Guardrails (Gr), Metrics (Mt), and Evaluation (Ev).
+    Covers: Guardrails (Gr), Red Teaming (Rt) mitigation, Metrics (Mt), Evaluation (Ev), and Human-in-the-Loop (Hl).
     """
 
     def __init__(self):
         self.board_size = 15
-        # Cost configuration (using Gemini Flash pricing as a baseline)
         self.cost_per_1k_tokens = 0.0001 
+        # Threshold for Human-in-the-Loop (Hl) escalation
+        self.human_review_threshold = 0.7 
+        # Common adversarial patterns for basic runtime Red Teaming mitigation
+        self.adversarial_patterns = re.compile(
+            r"(ignore previous|system prompt|bypass|jailbreak|forget instructions)", 
+            re.IGNORECASE
+        )
 
-    # --- Validation: Guardrails (Gr) ---
-    # --- Validation: Guardrails (Gr) ---
-    def validate_output_safety(self, ai_reply: str, board: List[str]) -> bool:
+    # --- Validation: Input Guardrails & Red Teaming Mitigation (Gr/Rt) ---
+    def detect_adversarial_input(self, user_message: str) -> bool:
         """
-        [Guardrails] Runtime safety filter.
-        Checks if the AI's suggested coordinates are valid and not already occupied,
-        preventing coordinate hallucinations.
-        """
-        # [BUGFIX] Broadened regex to catch ALL letter-number combinations (e.g., Z99)
-        # so they don't silently bypass the bounds check.
-        coords = re.findall(r'[A-Z]\d+', ai_reply.upper())
+        [Red Teaming / Guardrails] Validates incoming user messages against known injection patterns.
         
+        Args:
+            user_message (str): The raw input from the user.
+            
+        Returns:
+            bool: True if malicious/adversarial intent is detected, False otherwise.
+        """
+        if self.adversarial_patterns.search(user_message):
+            logger.warning(f"[Rt/Gr] Adversarial input detected and blocked: {user_message}")
+            return True
+        return False
+
+    # --- Validation: Output Guardrails (Gr) ---
+    def validate_output_safety(self, ai_reply: str, board: List[str]) -> Tuple[bool, str]:
+        """
+        [Guardrails] Runtime safety and policy filter.
+        Checks for coordinate hallucinations and enforces the strict word count policy.
+        
+        Returns:
+            Tuple[bool, str]: (Is Safe, Reason/Error Message)
+        """
+        # 1. Policy Enforcement: Word Count Limit (< 80 words)
+        word_count = len(ai_reply.split())
+        if word_count > 80:
+            logger.warning(f"[Gr] Policy violation: Output too long ({word_count} words).")
+            return False, "Output exceeded the 80-word limit policy."
+
+        # 2. Hallucination Detection: Coordinate Validation
+        coords = re.findall(r'[A-Z]\d+', ai_reply.upper())
         if not coords:
-            return True # Conversational reply, no coordinate suggestions detected
+            return True, "Safe" 
         
         for coord in coords:
-            # Separate the letter column and the number row
-            # Use regex to handle cases where there might be multiple letters (though unlikely)
             match = re.match(r'([A-Z]+)(\d+)', coord)
             if not match:
                 continue
                 
             col_str, row_str = match.groups()
             
-            # If the column has more than one letter (e.g., AA), it's definitely out of bounds for 15x15
             if len(col_str) > 1:
-                logger.warning(f"[Gr] Blocked out-of-bounds coordinate hallucination: {coord}")
-                return False
+                logger.warning(f"[Gr] Out-of-bounds coordinate: {coord}")
+                return False, f"Invalid coordinate {coord}"
                 
             col = ord(col_str) - ord('A')
             row = int(row_str) - 1
             
-            # Hallucination detection: coordinates out of bounds
             if row < 0 or row >= self.board_size or col < 0 or col >= self.board_size:
-                logger.warning(f"[Gr] Blocked out-of-bounds coordinate hallucination: {coord}")
-                return False
+                logger.warning(f"[Gr] Out-of-bounds coordinate: {coord}")
+                return False, f"Invalid coordinate {coord}"
                 
-            # Hallucination detection: placed on existing stones
             idx = row * self.board_size + col
             if board[idx] != "":
-                logger.warning(f"[Gr] Blocked occupied position hallucination: {coord} already has a stone")
-                return False
+                logger.warning(f"[Gr] Occupied position hallucinated: {coord}")
+                return False, f"Coordinate {coord} is already occupied"
                 
-        return True
+        return True, "Safe"
 
     # --- Assurance: Metrics (Mt) ---
     def track_telemetry(self, start_time: float, response_text: str) -> Dict[str, Any]:
         """
         [Metrics] Basic measurements: latency, estimated tokens, and cost.
-        
-        Args:
-            start_time (float): The Unix timestamp before the LLM invocation.
-            response_text (str): The final response text.
-            
-        Returns:
-            Dict[str, Any]: A telemetry dictionary for logging and monitoring.
         """
         latency = time.time() - start_time
-        # Rough token estimation (1 English word / Chinese char ≈ 1.5 - 2 tokens)
         estimated_tokens = len(response_text) * 2 
         estimated_cost = (estimated_tokens / 1000) * self.cost_per_1k_tokens
         
@@ -87,30 +101,35 @@ class GomokuAIGovernance:
             "timestamp": datetime.utcnow().isoformat()
         }
 
-    # --- Assurance: Evaluation (Ev) ---
+    # --- Assurance: Evaluation (Ev) & Human-in-the-Loop (Hl) ---
     def evaluate_response_consistency(self, ai_reply: str, last_evaluation: Dict[str, Any]) -> float:
         """
-        [Evaluation] Quality audit.
-        Checks if the AI's reply matches the heuristic win rate injected by the frontend.
-        
-        Args:
-            ai_reply (str): The response text generated by the LLM.
-            last_evaluation (Dict[str, Any]): The heuristic payload from the client.
-            
-        Returns:
-            float: A quality score between 0.0 (fail) and 1.0 (pass).
+        [Evaluation] Quality audit comparing AI reply to deterministic heuristics.
         """
         if not last_evaluation or "win_rate" not in last_evaluation:
-            return 1.0 # No baseline data, skip evaluation
+            return 1.0 
 
-        # Attempt to extract percentage win rate from the reply
         match = re.search(r'(\d+)%', ai_reply)
         if match:
             reported_wr = int(match.group(1))
             actual_wr = int(last_evaluation["win_rate"].replace('%', ''))
             
-            # If deviation exceeds 10%, penalize the evaluation quality score
             deviation = abs(reported_wr - actual_wr)
             return max(0.0, 1.0 - (deviation / 100))
             
-        return 0.5 # Win rate not mentioned; neutral score
+        return 0.5 
+
+    def requires_human_oversight(self, quality_score: float) -> bool:
+        """
+        [Human-in-the-Loop] Flags low-quality interactions for manual review.
+        
+        Args:
+            quality_score (float): The score returned by the Evaluation function.
+            
+        Returns:
+            bool: True if it should be flagged for HITL, False otherwise.
+        """
+        escalate = quality_score < self.human_review_threshold
+        if escalate:
+            logger.info(f"[Hl] Interaction flagged for Human-in-the-Loop review. Score: {quality_score}")
+        return escalate
