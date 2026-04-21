@@ -35,8 +35,8 @@ jobs:
 
       - name: 🧪 Execute LangChain Validation Suite
         env:
-          # 必须在 GitHub 仓库的 Settings -> Secrets and variables -> Actions 中配置此密钥
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }} # [新增] 注入 Pinecone 密钥
         run: |
           echo "Running Pytest suite with LangChain Evaluator..."
           pytest tests/test_llm_outputs.py -v -W ignore::DeprecationWarning

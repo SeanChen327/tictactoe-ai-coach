@@ -2,12 +2,16 @@ import os
 import pytest
 import httpx
 from langchain_google_genai import ChatGoogleGenerativeAI
+from dotenv import load_dotenv  # [新增] 引入 dotenv
 
-# [FIX 1] Update imports to use langchain_core to match modern LangChain architecture
+# [新增] 强制在脚本第一步读取根目录的 .env 文件
+load_dotenv() 
+
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# Ensure API Key is available for the LangChain evaluator
+# 现在它绝对能百分之百拿到你写在 .env 里的密钥了！
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 class TestAICoachQuality:
@@ -71,8 +75,8 @@ class TestAICoachQuality:
             # ai_reply = response.json()["reply"]
             ai_reply = "You're doing great with a 55% win rate! Tactically, playing at H9 is your best move right now to build a strong offensive shape. Keep it up!"
 
-        # 3. Use LangChain to evaluate the output
-        eval_result = evaluator_chain.invoke({
+        # 3. Use LangChain to evaluate the output (Asynchronously!)
+        eval_result = await evaluator_chain.ainvoke({
             "win_rate": "55%",
             "next_move": "H9",
             "ai_response": ai_reply

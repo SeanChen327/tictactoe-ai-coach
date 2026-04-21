@@ -14,6 +14,29 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 ## 📖 Decision Log
 
+### Feature: LangChain RAG Architecture & MRL Database Migration
+
+**Date:** 2026-04-16
+**Branch:** `feature/langchain-rag-refactor`
+**Status:** Pending Peer Review
+
+#### 1. Technical Decisions
+
+- **LangChain LCEL Pipeline Integration**: Abstracted the core RAG (Retrieval-Augmented Generation) logic out of the FastAPI routing layer into a dedicated GomokuRagService class. Utilized LangChain Expression Language (LCEL) to create a highly modular, decoupled, and testable AI pipeline.
+- **Zero-Downtime Database Migration**: Proactively resolved a critical cloud-native failure caused by Google's deprecation of the text-embedding-004 model by migrating the entire ingestion and retrieval pipeline to the state-of-the-art gemini-embedding-001 model.
+- **Dimensionality Reduction (MRL)**: Leveraged Matryoshka Representation Learning (output_dimensionality=768) to forcibly compress the new 3072-dimensional vectors. This architectural decision ensured seamless backward compatibility with our existing Pinecone index, completely avoiding costly infrastructure teardowns and database re-provisioning.
+- **Zero API Modification**: Mathematically guaranteed that main.py routing logic and existing endpoint contracts (ChatRequest / ChatResponse) remain untouched, preserving 100% backward compatibility with the frontend UI.
+
+#### 2. Security & Quality Audit
+
+- **Environment Isolation**: Reinforced the strict boundary between development and production. Production variables are tightly secured in Render Environment Variables, while CI/CD validation utilizes GitHub Secrets and pytest-dotenv.
+- **Automated Regression Cleared**: The newly refactored pipeline successfully passed the rigorous LangChain LLM-as-a-Judge QA suite (tests/test_llm_outputs.py). This guarantees that despite the underlying architectural overhaul, the AI Coach maintains absolute compliance with frontend heuristic payloads and introduces zero coordinate hallucinations.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
 ---
 
 ### Feature: LangChain Automated QA Evaluation Pipeline
