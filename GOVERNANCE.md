@@ -14,6 +14,33 @@ To ensure production-grade quality and security, all contributors must strictly 
 
 ## 📖 Decision Log
 
+### Feature: Production-Readiness Audit Resolution (Architecture, Reliability & Security)
+
+**Date:** 2026-04-25
+**Branch:** `feature/reconcile-architecture`
+**Status:** Pending Peer Review
+
+#### 1. Technical Decisions
+
+- **Architecture Alignment:** Deprecated the simplistic 3x3 `analyze_board` function in `main.py`. The AI RAG prompt now natively ingests tactical data directly from the 15x15 `GomokuSimulator` engine, eliminating logical contradictions between the frontend and backend.
+- **Strict API Contracts:** Enforced defensive programming via Pydantic. `ChatRequest` now mathematically guarantees the board array length is exactly 225, preventing malformed payload crashes, and defines a strict `ChatResponse` schema.
+- **Reliability Engineering (Tenacity & Timeouts):** Implemented an exponential backoff retry mechanism (max 3 attempts) for the LangChain pipeline. Enforced strict asynchronous timeouts: 3.0s for Pinecone retrieval and 8.0s for Gemini generation.
+- **Graceful RAG Degradation:** Engineered a fallback path. If Pinecone times out or crashes, the system catches the exception and bypasses external knowledge retrieval, relying entirely on the local heuristic engine to ensure the user experience remains uninterrupted.
+- **Retrieval Optimization:** Adjusted Pinecone `top_k` from 2 to 3 to balance tactical diversity and latency. Injected the current tactical board state into the search query to improve embedding match relevance.
+
+#### 2. Security & Quality Audit
+
+- **SAST Clearance:** Ran `bandit` static analysis. Achieved a 100% pass rate with 0 High/Medium vulnerabilities across the codebase.
+- **CORS Lockdown:** Restricted `allow_origins` from a wildcard `["*"]` to strict local and production URLs, preventing unauthorized cross-origin API quota consumption.
+- **Prompt Injection Defense:** Fortified `ai_governance.py` regex patterns to actively intercept and block System Prompt Hijacking attempts (e.g., users submitting `[ROLE]:` or `[STRICT GUIDELINES]:`).
+- **Observability:** Injected a UUID `trace_id` into the `/api/chat` payload. This ID is now passed back to the client and logged centrally alongside Telemetry (Mt) and Human-in-the-Loop (Hl) quality scores, enabling deterministic error tracking.
+- **UX Degradation UI:** Updated the frontend `index.html` to intercept 503 (Service Unavailable) and 504 (Gateway Timeout) backend responses, rendering a friendly yellow warning UI rather than a raw console error.
+
+#### 3. Review Protocol
+
+- **Primary Peer Reviewer**: Ruby (@xxandy-what)
+- **Technical Consultant**: Sean (@SeanChen327)
+
 ### Feature: AI Validation & Assurance Pipeline (Governance Module)
 
 **Date:** 2026-04-21

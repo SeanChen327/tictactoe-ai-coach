@@ -880,12 +880,27 @@
                     });
                     
                     if (response.status === 401) { executeLogout(); throw new Error("Session expired."); }
-                    if (!response.ok) throw new Error(`Error ${response.status}`);
+                    
+                    // [Feedback 7 Fix] 智能解析后端的友好错误信息
+                    if (!response.ok) {
+                        let errorMsg = `Server Error (${response.status})`;
+                        try {
+                            const errData = await response.json();
+                            if (errData.detail) errorMsg = errData.detail;
+                        } catch(e) { }
+                        throw new Error(errorMsg);
+                    }
                     
                     const data = await response.json();
                     document.getElementById(loadingId).innerHTML = `<strong>Coach:</strong> ${data.reply}`;
+                    
                 } catch (error) {
-                    document.getElementById(loadingId).innerHTML = `<strong style="color:red;">Coach:</strong> ${error.message}`;
+                    // [Feedback 7 Fix] UX 优化：遇到故障时，渲染温和的降级 UI 提示框
+                    document.getElementById(loadingId).innerHTML = `
+                        <div style="background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 6px; border-left: 4px solid #ffeeba; margin-top: 5px; font-size: 0.9em; line-height: 1.4;">
+                            <strong>⚠️ Notice</strong><br>
+                            ${error.message}
+                        </div>`;
                 }
                 history.scrollTop = history.scrollHeight;
             }

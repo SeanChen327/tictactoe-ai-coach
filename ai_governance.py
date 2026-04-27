@@ -16,11 +16,13 @@ class GomokuAIGovernance:
     def __init__(self):
         self.board_size = 15
         self.cost_per_1k_tokens = 0.0001 
-        # Threshold for Human-in-the-Loop (Hl) escalation
         self.human_review_threshold = 0.7 
-        # Common adversarial patterns for basic runtime Red Teaming mitigation
+        
+        # [SECURITY UPGRADE] Enhanced adversarial patterns
+        # 1. Catches traditional jailbreaks
+        # 2. Catches system prompt spoofing (e.g., [ROLE]:, [CONTEXT]:)
         self.adversarial_patterns = re.compile(
-            r"(ignore previous|system prompt|bypass|jailbreak|forget instructions)", 
+            r"(ignore previous|system prompt|bypass|jailbreak|forget instructions|\[ROLE\]:|\[STRICT GUIDELINES\]:|\[TACTICAL ANALYSIS\]:)", 
             re.IGNORECASE
         )
 
